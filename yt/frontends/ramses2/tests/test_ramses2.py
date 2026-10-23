@@ -64,7 +64,9 @@ def _cell_value(ckey, level, icell, ivar):
     return 1.0 + ivar + 0.1 * level + 0.01 * icell + 1e-3 * (x + 2 * y + 4 * z)
 
 
-def _write_particles(folder, prefix, fields, pos_per_file, id_dtype="<i4"):
+def _write_particles(
+    folder, prefix, fields, pos_per_file, id_dtype="<i4", legacy_header=False
+):
     names = fields.split()
     with open(folder / f"{prefix}_header.txt", "w") as f:
         f.write(" Total number of particles\n")
@@ -72,7 +74,13 @@ def _write_particles(folder, prefix, fields, pos_per_file, id_dtype="<i4"):
         f.write(" Total number of files\n")
         f.write(f"{len(pos_per_file):12d}\n")
         f.write(" Particle fields\n")
-        f.write(fields + " ")
+        if legacy_header:
+            f.write(fields + " ")
+        else:
+            for name in names:
+                dtype = {"level": "i4", "birth_id": id_dtype[1:]}.get(name, "f4")
+                ncomp = 3 if name in ("pos", "vel") else 1
+                f.write(f" {name} {dtype} {ncomp}\n")
 
     first_id = 1
     for ifile, pos in enumerate(pos_per_file, start=1):
@@ -106,7 +114,13 @@ def ramses2_output(tmp_path):
     return _make_output(tmp_path)
 
 
-def _make_output(tmp_path, logical_refinement=False, id_dtype="<i4", **info_kwa):
+def _make_output(
+    tmp_path,
+    logical_refinement=False,
+    id_dtype="<i4",
+    legacy_header=False,
+    **info_kwa,
+):
     folder = tmp_path / "output_00001"
     folder.mkdir()
     nlevels = LEVELMAX - LEVELMIN + 1
@@ -165,8 +179,15 @@ def _make_output(tmp_path, logical_refinement=False, id_dtype="<i4", **info_kwa)
         DM_FIELDS,
         [[(0.2, 0.2, 0.2), (1.5, 0.5, 0.5)], [(1.8, 1.8, 1.8)]],
         id_dtype=id_dtype,
+        legacy_header=legacy_header,
     )
-    _write_particles(folder, "star", STAR_FIELDS, [[], [(1.0, 1.0, 1.0)]])
+    _write_particles(
+        folder,
+        "star",
+        STAR_FIELDS,
+        [[], [(1.0, 1.0, 1.0)]],
+        legacy_header=legacy_header,
+    )
 
     return folder, np.array(leaves)
 
@@ -193,8 +214,8 @@ def test_load(ramses2_output):
     assert not ds.cosmological_simulation
     assert_allclose_units(ds.length_unit, ds.quan(2 * 3.0856776e21, "cm"))
     assert_allclose_units(ds.current_time, ds.quan(0.5 * 3.1557e13, "s"))
-    assert set(ds.particle_types_raw) == {"io", "star"}
-    assert ("ramses2", "Density") in ds.field_list
+    assert set(ds.particle_types_raw) == {"part", "star"}
+    assert ("ramses", "density") in ds.field_list
     assert ("star", "particle_birth_time") in ds.field_list
 
 
@@ -216,7 +237,7 @@ def test_cells(tmp_path, logical_refinement):
     order_ref = np.lexsort(leaves[:, :3].T)
     np.testing.assert_allclose(xyz[order_yt], leaves[order_ref, :3])
     np.testing.assert_allclose(
-        ad["ramses2", "Density"].d[order_yt], leaves[order_ref, 3], rtol=1e-6
+        ad["ramses", "density"].d[order_yt], leaves[order_ref, 3], rtol=1e-6
     )
     assert ad["index", "grid_level"].max() == 1
 
@@ -227,25 +248,25 @@ def test_region_selection(ramses2_output):
     reg = ds.region([0.5] * 3, [0, 0, 0], [0.5] * 3)
     centers = leaves[:, :3]
     expected = np.all(centers < 0.5, axis=1).sum()
-    assert reg["ramses2", "Density"].size == expected
+    assert reg["ramses", "density"].size == expected
     # Only the root octs with x < 0.5 are selected
-    assert reg["io", "particle_mass"].size == 1
+    assert reg["part", "particle_mass"].size == 1
 
 
 def test_particles(ramses2_output):
     folder, _ = ramses2_output
     ds = load(folder)
-    assert ds.particle_type_counts == {"io": 3, "star": 1}
+    assert ds.particle_type_counts == {"part": 3, "star": 1}
 
     ad = ds.all_data()
     np.testing.assert_allclose(
-        np.sort(ad["io", "particle_position_x"].to("code_length").d),
+        np.sort(ad["part", "particle_position_x"].to("code_length").d),
         [0.1, 0.75, 0.9],
         rtol=1e-6,
     )
-    np.testing.assert_equal(np.sort(ad["io", "particle_identity"].d), [1, 2, 3])
+    np.testing.assert_equal(np.sort(ad["part", "particle_identity"].d), [1, 2, 3])
     np.testing.assert_allclose(
-        ad["io", "particle_velocity_z"].to("code_velocity").d, 0.3, rtol=1e-6
+        ad["part", "particle_velocity_z"].to("code_velocity").d, 0.3, rtol=1e-6
     )
     assert ad["star", "particle_mass"].size == 1
     assert_allclose_units(
@@ -253,12 +274,13 @@ def test_particles(ramses2_output):
     )
 
 
-def test_particle_long_ids(tmp_path):
-    folder, _ = _make_output(tmp_path, id_dtype="<i8")
+@pytest.mark.parametrize("legacy_header", [False, True])
+def test_particle_long_ids(tmp_path, legacy_header):
+    folder, _ = _make_output(tmp_path, id_dtype="<i8", legacy_header=legacy_header)
     ds = load(folder)
     ad = ds.all_data()
-    np.testing.assert_equal(np.sort(ad["io", "particle_identity"].d), [1, 2, 3])
-    np.testing.assert_allclose(ad["io", "particle_mass"].to("code_mass").d, 0.5)
+    np.testing.assert_equal(np.sort(ad["part", "particle_identity"].d), [1, 2, 3])
+    np.testing.assert_allclose(ad["part", "particle_mass"].to("code_mass").d, 0.5)
 
 
 def test_cosmology(tmp_path):
@@ -285,4 +307,4 @@ def test_empty_file(tmp_path):
 
     ds = load(folder)
     assert ds.nfile == 3
-    assert ds.all_data()["ramses2", "Density"].size == len(leaves)
+    assert ds.all_data()["ramses", "density"].size == len(leaves)

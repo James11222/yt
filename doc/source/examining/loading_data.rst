@@ -3323,16 +3323,25 @@ output folder (or any file in it) to ``yt.load``:
 
    ds = yt.load("output_00080")
 
-Hydro variables are loaded into the ``"ramses2"`` field type and gravity
-variables into the ``"gravity"`` field type, using the names given in the
-``hydro_header.txt`` and ``grav_header.txt`` files. Each particle file is
-loaded as its own particle type: ``"io"`` (dark matter, ``part.NNNNN``),
-``"star"``, ``"sink"``, ``"tree"`` and ``"tracer"``, with the fields listed in
-the corresponding ``<prefix>_header.txt`` file.
+Grid variables keep the names given in the ``<prefix>_header.txt`` files
+(``density``, ``velocity_x``, ``thermal_pressure``, ``potential``,
+``accel_x``, ...) and are loaded into the ``"ramses"`` (hydro),
+``"gravity"``, ``"rt"`` and ``"cr"`` field types. Each particle file is
+loaded as a particle type named after its prefix: ``"part"`` (dark matter),
+``"star"``, ``"sink"``, ``"tree"``, ``"trac"``, ``"dust"`` and ``"core"``.
+Particle fields are named ``particle_<name>`` after the
+``<prefix>_header.txt`` file, except for ``pos``, ``vel``, ``accel``,
+``angmom``, ``birth_id``, ``level``, ``birth_date`` and ``merging_date``,
+which are loaded as ``particle_position_[xyz]``, ``particle_velocity_[xyz]``,
+``particle_acceleration_[xyz]``, ``particle_angular_momentum_[xyz]``,
+``particle_identity``, ``particle_level``, ``particle_birth_time`` and
+``particle_merging_time``. These names follow the ``yt_ramses.py`` reader
+distributed in ``utils/py`` of the RAMSES II repository.
 
-For cosmological simulations, the ``"particle_birth_time"`` field contains the
-physical time at which the particle was born, and the ``"age"`` field the age
-of the particle at the time of the output.
+For cosmological simulations, ``current_time`` is the age of the universe at
+the redshift of the output, ``"particle_birth_time"`` contains the physical
+time at which the particle was born, and the ``"age"`` field the age of the
+particle at the time of the output.
 
 The frontend currently has the following limitations:
 
