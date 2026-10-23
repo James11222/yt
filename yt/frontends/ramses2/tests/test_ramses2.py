@@ -268,3 +268,21 @@ def test_cosmology(tmp_path):
     assert ds.current_redshift == pytest.approx(1.0)
     assert ds.hubble_constant == pytest.approx(0.7)
     assert ds.current_time.to("Gyr") == pytest.approx(5.75, rel=0.02)
+
+
+def test_empty_file(tmp_path):
+    # A file can hold no octs at all, e.g. when nfile is large
+    folder, leaves = _make_output(tmp_path)
+    nlevels = LEVELMAX - LEVELMIN + 1
+    header = np.array([3, LEVELMIN, LEVELMAX] + [0] * nlevels, dtype="<i4")
+    (folder / "amr.00003").write_bytes(header.tobytes())
+    header = np.array([3, NVAR, LEVELMIN, LEVELMAX] + [0] * nlevels, dtype="<i4")
+    (folder / "hydro.00003").write_bytes(header.tobytes())
+    info = (folder / "info.txt").read_text()
+    (folder / "info.txt").write_text(
+        info.replace("nfile       =          2", "nfile       =          3")
+    )
+
+    ds = load(folder)
+    assert ds.nfile == 3
+    assert ds.all_data()["ramses2", "Density"].size == len(leaves)

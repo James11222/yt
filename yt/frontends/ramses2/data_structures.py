@@ -155,14 +155,16 @@ class RAMSES2DomainFile:
         level_count = self.level_count
         noct = int(level_count.sum())
         header_size = 4 * (3 + len(level_count))
+        if noct == 0:
+            empty = [np.empty((0, 3), dtype="int32")] * len(level_count)
+            return empty, [np.empty(0, dtype="int32")] * len(level_count)
         record_size = (os.path.getsize(self.amr_fn) - header_size) // max(noct, 1)
 
         # Recent versions store the refinement map of each oct as a bitmask
         # (one int32), older ones as one 4-byte logical per cell.
         nref = record_size // 4 - 3
         if nref not in (1, 8) or (
-            noct > 0
-            and record_size * noct + header_size != os.path.getsize(self.amr_fn)
+            record_size * noct + header_size != os.path.getsize(self.amr_fn)
         ):
             raise RuntimeError(f"Could not infer the oct record size of {self.amr_fn}")
         dt = np.dtype([("ckey", "<i4", (3,)), ("refined", "<i4", (nref,))])
