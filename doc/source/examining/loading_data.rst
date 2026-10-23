@@ -3304,6 +3304,45 @@ stars might look like this:
 For a cosmological simulation, this filter will distinguish between stars and
 dark matter particles.
 
+.. _loading-ramses2-data:
+
+RAMSES II Data
+--------------
+
+`RAMSES II <https://github.com/ramses-organisation/ramses2>`_ (and its
+predecessor mini-ramses) write outputs in a different format than RAMSES.
+Each ``output_XXXXX`` folder contains an ``info.txt`` file and a set of
+``amr.NNNNN``, ``hydro.NNNNN``, ``grav.NNNNN``, ``part.NNNNN``,
+``star.NNNNN``, ``sink.NNNNN``, ... files, where ``NNNNN`` runs from 1 to
+the ``nfile`` parameter of the run. These outputs are loaded by passing the
+output folder (or any file in it) to ``yt.load``:
+
+.. code-block:: python
+
+   import yt
+
+   ds = yt.load("output_00080")
+
+Hydro variables are loaded into the ``"ramses2"`` field type and gravity
+variables into the ``"gravity"`` field type, using the names given in the
+``hydro_header.txt`` and ``grav_header.txt`` files. Each particle file is
+loaded as its own particle type: ``"io"`` (dark matter, ``part.NNNNN``),
+``"star"``, ``"sink"``, ``"tree"`` and ``"tracer"``, with the fields listed in
+the corresponding ``<prefix>_header.txt`` file.
+
+For cosmological simulations, the ``"particle_birth_time"`` field contains the
+physical time at which the particle was born, and the ``"age"`` field the age
+of the particle at the time of the output.
+
+The frontend currently has the following limitations:
+
+* only 3D outputs are supported,
+* ghost zones (and hence derived fields that require them, such as gradients)
+  are not supported,
+* the mean molecular weight is not stored in the outputs, so the
+  ``("gas", "temperature")`` field is the temperature over the mean molecular
+  weight.
+
 .. _loading-sph-data:
 
 SPH Particle Data
