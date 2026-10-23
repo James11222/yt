@@ -13,14 +13,14 @@ from yt.geometry.oct_geometry_handler import OctreeIndex
 from yt.utilities.cosmology import Cosmology
 
 from .definitions import (
-    FLUID_FIELD_NAMES,
-    FLUID_FILES,
+    FLUID_TYPES,
+    LEGACY_PARTICLE_FIELDS,
     OUTPUT_DIR_RE,
-    PARTICLE_FIELD_DESCRIPTORS,
-    PARTICLE_FILES,
+    PARTICLE_PREFIXES,
     RAMSES2_FILE_RE,
 )
 from .fields import RAMSES2FieldInfo
+from .io import particle_field_list
 
 # Offsets (in units of the oct width) of the 8 cells of an oct, in the
 # RAMSES ordering (x varies fastest).
@@ -363,14 +363,12 @@ class RAMSES2Index(OctreeIndex):
             yield YTDataChunk(dobj, "io", [subset], None, cache=cache)
 
     def _get_particle_type_counts(self):
-        counts = {}
-        for prefix, ptype in PARTICLE_FILES.items():
-            if ptype not in self.dataset.particle_types_raw:
-                continue
-            counts[ptype] = sum(
-                self.io._particle_count(dom.particle_fn(prefix)) for dom in self.domains
+        return {
+            ptype: sum(
+                self.io._particle_count(dom.particle_fn(ptype)) for dom in self.domains
             )
-        return counts
+            for ptype in self.dataset.particle_types_raw
+        }
 
 
 class RAMSES2Dataset(Dataset):
@@ -394,9 +392,10 @@ class RAMSES2Dataset(Dataset):
         sanitizer.validate()
         self.root_folder = str(sanitizer.root_folder)
 
-        self.fluid_types += tuple(FLUID_FILES.values())
+        self.fluid_types += tuple(FLUID_TYPES.values())
         self._fields_in_file = []
         self._particle_fields_in_file = {}
+        self._particle_descriptors = {}
         self.storage_filename = storage_filename
 
         super().__init__(
@@ -502,48 +501,55 @@ class RAMSES2Dataset(Dataset):
         self._detect_particle_fields()
 
     def _detect_fluid_fields(self):
-        for prefix, ftype in FLUID_FILES.items():
+        for prefix, ftype in FLUID_TYPES.items():
             header_fn = os.path.join(self.root_folder, f"{prefix}_header.txt")
             if not os.path.exists(header_fn):
                 continue
             with open(header_fn) as f:
                 for line in f:
-                    if not line.startswith("variable"):
-                        continue
-                    name = line.split(":", 1)[1].strip()
-                    self._fields_in_file.append(
-                        (ftype, FLUID_FIELD_NAMES.get(name, name))
-                    )
+                    if line.startswith("variable #"):
+                        name = line.split(":", 1)[1].strip()
+                        self._fields_in_file.append((ftype, name))
 
     def _detect_particle_fields(self):
-        """Read the list of particle fields of each type from <prefix>_header.txt."""
-        for prefix, ptype in PARTICLE_FILES.items():
-            header_fn = os.path.join(self.root_folder, f"{prefix}_header.txt")
+        """Read the fields of each particle type from <prefix>_header.txt.
+
+        Each particle type is named after the prefix of its files (part,
+        star, sink, ...). Recent headers list one field per line as
+        "name dtype ncomp"; older ones list the field names on one line.
+        """
+        for ptype in PARTICLE_PREFIXES:
+            header_fn = os.path.join(self.root_folder, f"{ptype}_header.txt")
             if not os.path.exists(header_fn):
                 continue
             with open(header_fn) as f:
                 lines = [line.strip() for line in f]
-            names = lines[lines.index("Particle fields") + 1].split()
-            unknown = [name for name in names if name not in PARTICLE_FIELD_DESCRIPTORS]
-            if unknown:
-                mylog.warning(
-                    "Skipping %s particles: unknown fields %s in %s",
-                    ptype,
-                    unknown,
-                    header_fn,
-                )
-                continue
-            if "size" in names or "charge" in names:
-                mylog.warning(
-                    "Skipping %s particles: the layout of files with "
-                    "size or charge fields is not supported.",
-                    ptype,
-                )
-                continue
-            self._particle_fields_in_file[ptype] = [
-                fname for name in names for fname in PARTICLE_FIELD_DESCRIPTORS[name][0]
+            lines = [
+                line for line in lines[lines.index("Particle fields") + 1 :] if line
             ]
-            self.parameters[f"{prefix}_fields"] = names
+            tokens = [line.split() for line in lines]
+            # A legacy header is a single line of names, which can also have
+            # three entries: check that the last token is a component count
+            if all(len(t) == 3 and t[2].isdigit() for t in tokens):
+                descriptors = [
+                    (name, dtype, int(ncomp)) for name, dtype, ncomp in tokens
+                ]
+            else:
+                names = lines[0].split()
+                unknown = [name for name in names if name not in LEGACY_PARTICLE_FIELDS]
+                if unknown:
+                    mylog.warning(
+                        "Skipping %s particles: unknown fields %s in %s",
+                        ptype,
+                        unknown,
+                        header_fn,
+                    )
+                    continue
+                descriptors = [(name, *LEGACY_PARTICLE_FIELDS[name]) for name in names]
+            self._particle_descriptors[ptype] = descriptors
+            self._particle_fields_in_file[ptype] = [
+                yname for yname, _, _ in particle_field_list(descriptors)
+            ]
 
         self.particle_types = self.particle_types_raw = tuple(
             self._particle_fields_in_file

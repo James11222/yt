@@ -9,7 +9,7 @@ from yt.utilities.physical_constants import (
 )
 
 b_units = "code_magnetic"
-ra_units = "code_length / code_time**2"
+accel_units = "code_velocity / code_time"
 rho_units = "code_density"
 vel_units = "code_velocity"
 pressure_units = "code_pressure"
@@ -18,20 +18,26 @@ ang_mom_units = "code_mass * code_velocity * code_length"
 
 
 class RAMSES2FieldInfo(FieldInfoContainer):
+    # Fields keep the names of the <prefix>_header.txt files, as in
+    # utils/py/yt_ramses.py of the RAMSES II repository
     known_other_fields: KnownFieldsT = (
-        ("Density", (rho_units, ["density"], None)),
-        ("x-velocity", (vel_units, ["velocity_x"], None)),
-        ("y-velocity", (vel_units, ["velocity_y"], None)),
-        ("z-velocity", (vel_units, ["velocity_z"], None)),
-        ("Pressure", (pressure_units, ["pressure"], None)),
-        ("Metallicity", ("", ["metallicity"], None)),
-        ("B_x", (b_units, ["magnetic_field_x"], None)),
-        ("B_y", (b_units, ["magnetic_field_y"], None)),
-        ("B_z", (b_units, ["magnetic_field_z"], None)),
-        ("x-acceleration", (ra_units, ["acceleration_x"], None)),
-        ("y-acceleration", (ra_units, ["acceleration_y"], None)),
-        ("z-acceleration", (ra_units, ["acceleration_z"], None)),
-        ("Potential", (specific_ener_units, ["potential"], None)),
+        ("density", (rho_units, ["density"], None)),
+        ("velocity_x", (vel_units, ["velocity_x"], None)),
+        ("velocity_y", (vel_units, ["velocity_y"], None)),
+        ("velocity_z", (vel_units, ["velocity_z"], None)),
+        ("thermal_pressure", (pressure_units, ["pressure"], None)),
+        ("magnetic_field_x", (b_units, [], None)),
+        ("magnetic_field_y", (b_units, [], None)),
+        ("magnetic_field_z", (b_units, [], None)),
+        ("metal_mass_fraction", ("", ["metallicity"], None)),
+        ("xHI", ("", ["H_p0_fraction"], None)),
+        ("xHII", ("", ["H_p1_fraction"], None)),
+        ("xHeII", ("", ["He_p1_fraction"], None)),
+        ("xHeIII", ("", ["He_p2_fraction"], None)),
+        ("potential", (specific_ener_units, ["potential"], None)),
+        ("accel_x", (accel_units, ["acceleration_x"], None)),
+        ("accel_y", (accel_units, ["acceleration_y"], None)),
+        ("accel_z", (accel_units, ["acceleration_z"], None)),
     )
     known_particle_fields: KnownFieldsT = (
         ("particle_position_x", ("code_length", [], None)),
@@ -40,21 +46,21 @@ class RAMSES2FieldInfo(FieldInfoContainer):
         ("particle_velocity_x", (vel_units, [], None)),
         ("particle_velocity_y", (vel_units, [], None)),
         ("particle_velocity_z", (vel_units, [], None)),
-        ("particle_mass", ("code_mass", [], None)),
-        ("particle_potential", (specific_ener_units, [], None)),
-        ("particle_metallicity", ("", [], None)),
-        ("particle_acceleration_x", (ra_units, [], None)),
-        ("particle_acceleration_y", (ra_units, [], None)),
-        ("particle_acceleration_z", (ra_units, [], None)),
+        ("particle_acceleration_x", (accel_units, [], None)),
+        ("particle_acceleration_y", (accel_units, [], None)),
+        ("particle_acceleration_z", (accel_units, [], None)),
         ("particle_angular_momentum_x", (ang_mom_units, [], None)),
         ("particle_angular_momentum_y", (ang_mom_units, [], None)),
         ("particle_angular_momentum_z", (ang_mom_units, [], None)),
+        ("particle_mass", ("code_mass", [], None)),
+        ("particle_potential", (specific_ener_units, [], None)),
+        ("particle_identity", ("", ["particle_index"], None)),
+        ("particle_merging_id", ("", [], None)),
+        ("particle_tracking_id", ("", [], None)),
+        ("particle_level", ("", [], None)),
         ("particle_birth_time", ("code_time", ["creation_time"], None)),
         ("particle_merging_time", ("code_time", [], None)),
-        ("particle_refinement_level", ("", [], None)),
-        ("particle_identity", ("", ["particle_index"], None)),
-        ("particle_merging_identity", ("", [], None)),
-        ("particle_tracking_identity", ("", [], None)),
+        ("particle_metallicity", ("", [], None)),
     )
 
     def setup_particle_fields(self, ptype):
