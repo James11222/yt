@@ -527,10 +527,12 @@ class RAMSES2Dataset(Dataset):
             lines = [
                 line for line in lines[lines.index("Particle fields") + 1 :] if line
             ]
-            if all(len(line.split()) == 3 for line in lines):
+            tokens = [line.split() for line in lines]
+            # A legacy header is a single line of names, which can also have
+            # three entries: check that the last token is a component count
+            if all(len(t) == 3 and t[2].isdigit() for t in tokens):
                 descriptors = [
-                    (name, dtype, int(ncomp))
-                    for name, dtype, ncomp in (line.split() for line in lines)
+                    (name, dtype, int(ncomp)) for name, dtype, ncomp in tokens
                 ]
             else:
                 names = lines[0].split()

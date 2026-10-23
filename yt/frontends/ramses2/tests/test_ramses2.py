@@ -308,3 +308,19 @@ def test_empty_file(tmp_path):
     ds = load(folder)
     assert ds.nfile == 3
     assert ds.all_data()["ramses", "density"].size == len(leaves)
+
+
+def test_legacy_header_three_fields(tmp_path):
+    # A legacy header listing three fields looks like a new-style line
+    folder, _ = _make_output(tmp_path)
+    _write_particles(
+        folder,
+        "trac",
+        "pos level birth_id",
+        [[(0.2, 0.2, 0.2)], []],
+        legacy_header=True,
+    )
+    ds = load(folder)
+    ad = ds.all_data()
+    np.testing.assert_equal(ad["trac", "particle_identity"].d, [1])
+    np.testing.assert_equal(ad["trac", "particle_level"].d, [LEVELMIN])
